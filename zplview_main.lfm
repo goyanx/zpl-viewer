@@ -10,6 +10,9 @@ object Form1: TForm1
   Menu = MainMenu1
   OnClose = FormClose
   OnCreate = FormCreate
+  OnKeyDown = FormKeyDown
+  OnKeyPress = FormKeyPress
+  KeyPreview = True
   LCLVersion = '2.0.6.0'
   object Image1: TImage
     Left = 5
@@ -109,23 +112,29 @@ object Form1: TForm1
       TabOrder = 3
     end
     object BLabelPrev: TButton
-      Left = 82
+      Left = 78
       Height = 25
       Top = 620
-      Width = 30
+      Width = 34
       Anchors = [akRight, akBottom]
-      Caption = '<'
+      Caption = 'Prev'
+      Hint = 'Previous label (< or Left Arrow)'
       OnClick = BLabelPrevClick
+      ParentShowHint = False
+      ShowHint = True
       TabOrder = 4
     end
     object BLabelNext: TButton
-      Left = 118
+      Left = 114
       Height = 25
       Top = 620
-      Width = 30
+      Width = 34
       Anchors = [akRight, akBottom]
-      Caption = '>'
+      Caption = 'Next'
+      Hint = 'Next label (> or Right Arrow)'
       OnClick = BLabelNextClick
+      ParentShowHint = False
+      ShowHint = True
       TabOrder = 5
     end
   end

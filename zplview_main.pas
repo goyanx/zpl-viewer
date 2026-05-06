@@ -7,7 +7,7 @@ interface
 uses
   Classes, SysUtils, Forms, Controls, Graphics, Dialogs, Menus, ExtCtrls,
   StdCtrls, ComCtrls, Sockets, ssockets,fphttpclient,zplview_settings,dateutils,
-  INIFiles,Printers,lazlogger,DefaultTranslator,StrUtils;
+  INIFiles,Printers,lazlogger,DefaultTranslator,StrUtils,LCLType;
 type
 
   { TForm1 }
@@ -34,6 +34,8 @@ type
     procedure BRenderManualClick(Sender: TObject);
     procedure FormClose(Sender: TObject; var CloseAction: TCloseAction);
     procedure FormCreate(Sender: TObject);
+    procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+    procedure FormKeyPress(Sender: TObject; var Key: char);
     procedure Image1DragDrop(Sender, Source: TObject; X, Y: Integer);
     procedure Image1DragOver(Sender, Source: TObject; X, Y: Integer;
       State: TDragState; var Accept: Boolean);
@@ -148,6 +150,40 @@ begin
   RulersVisible:= True;
   Panel1.Width:=15;
   UpdateLabelNavigation;
+end;
+
+procedure TForm1.FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+begin
+  if zpldatalen=0 then Exit;
+  case Key of
+    VK_LEFT:
+    begin
+      BLabelPrevClick(BLabelPrev);
+      Key:=0;
+    end;
+    VK_RIGHT:
+    begin
+      BLabelNextClick(BLabelNext);
+      Key:=0;
+    end;
+  end;
+end;
+
+procedure TForm1.FormKeyPress(Sender: TObject; var Key: char);
+begin
+  if zpldatalen=0 then Exit;
+  case Key of
+    '<':
+    begin
+      BLabelPrevClick(BLabelPrev);
+      Key:=#0;
+    end;
+    '>':
+    begin
+      BLabelNextClick(BLabelNext);
+      Key:=#0;
+    end;
+  end;
 end;
 
 procedure TForm1.Image1DragDrop(Sender, Source: TObject; X, Y: Integer);

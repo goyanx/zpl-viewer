@@ -4,7 +4,7 @@ Desktop ZPL (Zebra Programming Language) viewer and printer emulator.
 
 `zpl-viewer` listens on a JetDirect-style TCP socket (default `9100`) and renders incoming ZPL using Labelary.
 
-It now supports **multi-label navigation** for ZPL batches (`^XA ... ^XZ` repeated): use the **`<`** and **`>`** buttons to move label-by-label.
+It now supports **multi-label navigation** for ZPL batches (`^XA ... ^XZ` repeated): use the **Prev** and **Next** buttons to move label-by-label.
 
 ![alt text](zpl_viewer.png)
 
@@ -75,9 +75,13 @@ You can also paste ZPL into the right panel and click `Render`.
 For a batch containing multiple labels:
 
 1. Render or receive the batch.
-2. Use `>` to go to the next label.
-3. Use `<` to go to the previous label.
+2. Use **Next** to go to the next label.
+3. Use **Prev** to go to the previous label.
 4. The status bar shows the current label index.
+
+Keyboard shortcuts:
+- `>` or Right Arrow = next label
+- `<` or Left Arrow = previous label
 
 When the last label is reached, the app shows: `No additional labels found in this ZPL batch.`
 
