@@ -7,12 +7,14 @@ interface
 uses
   Classes, SysUtils, Forms, Controls, Graphics, Dialogs, Menus, ExtCtrls,
   StdCtrls, ComCtrls, Sockets, ssockets,fphttpclient,zplview_settings,dateutils,
-  INIFiles,Printers,lazlogger,DefaultTranslator;
+  INIFiles,Printers,lazlogger,DefaultTranslator,StrUtils;
 type
 
   { TForm1 }
 
   TForm1 = class(TForm)
+    BLabelNext: TButton;
+    BLabelPrev: TButton;
     BRenderManual: TButton;
     Image1: TImage;
     MainMenu1: TMainMenu;
@@ -27,6 +29,8 @@ type
     StatusBar1: TStatusBar;
     TBLock: TToggleBox;
     procedure AcceptTimerTimer(Sender: TObject);
+    procedure BLabelNextClick(Sender: TObject);
+    procedure BLabelPrevClick(Sender: TObject);
     procedure BRenderManualClick(Sender: TObject);
     procedure FormClose(Sender: TObject; var CloseAction: TCloseAction);
     procedure FormCreate(Sender: TObject);
@@ -58,9 +62,15 @@ type
     RulersVisible : Boolean;
     settings : ZViewSettings;
     jobCnt: Integer;
+    currentLabelIndex: Integer;
+    knownLastLabelIndex: Integer;
+    estimatedLabelCount: Integer;
     inifile  : string;
     procedure ReadJetData(Sender: TObject; DataStream: TSocketStream);
-    procedure GetLabelaryData;
+    procedure UpdateLabelNavigation;
+    procedure UpdateJobStatusText;
+    function  EstimateLabelCount(data:string):Integer;
+    function  GetLabelaryData(LabelIndex: Integer; ShowErrors: Boolean):Boolean;
     procedure NothingHappened(Sender: TObject);
     procedure LoadSettings;
     procedure SaveSettings;
@@ -113,6 +123,9 @@ begin
   FillChar (zpldata^,1000000,0);
   zpldatalen:=0;
   jobCnt:=0;
+  currentLabelIndex:=0;
+  knownLastLabelIndex:=-1;
+  estimatedLabelCount:=0;
 
   inifile:=IniFileName();
   ResetSettings;
@@ -134,6 +147,7 @@ begin
   DragDir:=-1;
   RulersVisible:= True;
   Panel1.Width:=15;
+  UpdateLabelNavigation;
 end;
 
 procedure TForm1.Image1DragDrop(Sender, Source: TObject; X, Y: Integer);
@@ -241,7 +255,7 @@ begin
     StatusBar1.Panels[1].Text:=IntToStr(settings.rotation);
     StatusBar1.Panels[3].Text:=GetLANIp()+':'+IntToStr(settings.tcpport);
     SaveSettings;
-    if zpldatalen>0 then GetLabelaryData;
+    if zpldatalen>0 then GetLabelaryData(currentLabelIndex,True);
     if socket.Port<>settings.tcpport then
     begin
       socket.Free;
@@ -329,7 +343,7 @@ begin
     if rotation>270 then rotation:=0;
     StatusBar1.Panels[1].Text:=IntToStr(rotation);
   end;
-  if zpldatalen>0 then GetLabelaryData;
+  if zpldatalen>0 then GetLabelaryData(currentLabelIndex,True);
 //  Image1.Picture.Clear;
 end;
 
@@ -348,8 +362,36 @@ begin
   if MSourceCode.Lines.Count > 3 then begin
     zpldatalen := MSourceCode.Lines.Text.Length;
     Move(MSourceCode.Lines.Text[1],zpldata^, zpldatalen);
-    GetLabelaryData;;
+    currentLabelIndex:=0;
+    knownLastLabelIndex:=-1;
+    estimatedLabelCount:=EstimateLabelCount(MSourceCode.Lines.Text);
+    GetLabelaryData(currentLabelIndex,True);
   end;
+end;
+
+procedure TForm1.BLabelPrevClick(Sender: TObject);
+begin
+  if currentLabelIndex<=0 then Exit;
+  Dec(currentLabelIndex);
+  if not GetLabelaryData(currentLabelIndex,True) then
+  begin
+    Inc(currentLabelIndex);
+    UpdateLabelNavigation;
+    UpdateJobStatusText;
+  end;
+end;
+
+procedure TForm1.BLabelNextClick(Sender: TObject);
+begin
+  if not GetLabelaryData(currentLabelIndex+1,False) then
+  begin
+    knownLastLabelIndex:=currentLabelIndex;
+    UpdateLabelNavigation;
+    UpdateJobStatusText;
+    ShowMessage('No additional labels found in this ZPL batch.');
+    Exit;
+  end;
+  UpdateLabelNavigation;
 end;
 
 procedure TForm1.NothingHappened(Sender: TObject);
@@ -400,11 +442,11 @@ var
 begin
   p:=Printer.Printers.IndexOf(settings.printer);
   if p<0 then begin
-    ShowMessage('Eingesteller Drucker ungültig');
+    ShowMessage('Configured printer is invalid.');
     exit
   end;
   if zpldatalen=0 then begin
-    ShowMessage('Es gibts nichts zu drucken!');
+    ShowMessage('There is nothing to print.');
     exit;
   end;
   Printer.PrinterIndex := p;
@@ -426,7 +468,7 @@ begin
 
 end;
 
-procedure TForm1.GetLabelaryData;
+function TForm1.GetLabelaryData(LabelIndex: Integer; ShowErrors: Boolean):Boolean;
 var FPHTTPClient: TFPHTTPClient;
     Fmt,URL,dpi: String;
     FmtSet:TFormatSettings;
@@ -435,9 +477,7 @@ var FPHTTPClient: TFPHTTPClient;
     //filename:string;
     errormsg:string;
 begin
-  Image1.Picture.Clear;
-  Image1.Invalidate;
-  Application.ProcessMessages;
+  Result:=False;
   FPHTTPClient := TFPHTTPClient.Create(nil);
   PostData := TMemoryStream.Create;
   PngData := TMemoryStream.Create;
@@ -458,30 +498,40 @@ begin
       end;
       FmtSet := DefaultFormatSettings;
       FmtSet.DecimalSeparator := '.';
-      Fmt:='http://api.labelary.com/v1/printers/%s/labels/%nx%n/0/';
+      Fmt:='http://api.labelary.com/v1/printers/%s/labels/%nx%n/%d/';
       //URL:='http://api.labelary.com/v1/printers/8dpmm/labels/6x6/0/';
-      URL:=Format(Fmt,[dpi,settings.width,settings.height],FmtSet);
+      URL:=Format(Fmt,[dpi,settings.width,settings.height,LabelIndex],FmtSet);
       FPHTTPClient.Post(URL,PngData);
       PngData.Position := 0;
       if FPHTTPClient.ResponseStatusCode=200 then
       begin
         Image1.Picture.LoadFromStream(PngData);
         inc(jobCnt);
-        StatusBar1.Panels[0].Text:=format('#%d - %s',[jobCnt,DateTimeToStr(Now)]);
+        currentLabelIndex:=LabelIndex;
+        if (knownLastLabelIndex>=0) and (currentLabelIndex>knownLastLabelIndex) then
+          knownLastLabelIndex:=-1;
+        UpdateJobStatusText;
+        UpdateLabelNavigation;
         if settings.save then SavePng;
         if settings.print then RePrint;
+        Result:=True;
       end
       else begin
         if PngData.Size<100 then begin
           SetString(errormsg, PAnsiChar(PngData.Memory), PngData.Size);
-          ShowMessage('Labelary Error:'+errormsg);
+          if ShowErrors then
+            ShowMessage('Labelary Error:'+errormsg);
         end
         else
-          ShowMessage('Labelary Error:'+FPHTTPClient.ResponseStatusText)
+          if ShowErrors then
+            ShowMessage('Labelary Error:'+FPHTTPClient.ResponseStatusText);
       end;
     except
       on E: exception do
-        ShowMessage(E.Message);
+      begin
+        if ShowErrors then
+          ShowMessage(E.Message);
+      end;
     end;
   finally
     FreeAndNil(PostData);
@@ -489,6 +539,46 @@ begin
     FreeAndNil(FPHTTPClient);
   end;
 
+end;
+
+procedure TForm1.UpdateJobStatusText;
+var
+  labeltext:string;
+begin
+  if knownLastLabelIndex>=0 then
+    labeltext:=Format('Label %d/%d',[currentLabelIndex+1,knownLastLabelIndex+1])
+  else if estimatedLabelCount>0 then
+    labeltext:=Format('Label %d/~%d',[currentLabelIndex+1,estimatedLabelCount])
+  else
+    labeltext:=Format('Label %d',[currentLabelIndex+1]);
+  StatusBar1.Panels[0].Text:=format('#%d - %s',[jobCnt,DateTimeToStr(Now)]);
+  StatusBar1.Panels[2].Text:=labeltext;
+end;
+
+procedure TForm1.UpdateLabelNavigation;
+begin
+  BLabelPrev.Enabled:=(zpldatalen>0) and (currentLabelIndex>0);
+  if knownLastLabelIndex>=0 then
+    BLabelNext.Enabled:=(zpldatalen>0) and (currentLabelIndex<knownLastLabelIndex)
+  else
+    BLabelNext.Enabled:=(zpldatalen>0);
+end;
+
+function TForm1.EstimateLabelCount(data:string):Integer;
+var
+  posFound: Integer;
+  upperData: String;
+begin
+  Result:=0;
+  upperData:=UpperCase(data);
+  posFound:=PosEx('^XA',upperData,1);
+  while posFound>0 do
+  begin
+    Inc(Result);
+    posFound:=PosEx('^XA',upperData,posFound+3);
+  end;
+  if Result=0 then
+    Result:=1;
 end;
 
 procedure TForm1.ReadJetData(Sender: TObject; DataStream: TSocketStream);
@@ -509,7 +599,10 @@ begin
     TBLock.Checked:=false;
   end;
   if settings.saverawdata then SaveRaw(db);
-  GetLabelaryData;
+  currentLabelIndex:=0;
+  knownLastLabelIndex:=-1;
+  estimatedLabelCount:=EstimateLabelCount(db);
+  GetLabelaryData(currentLabelIndex,True);
 end;
 
 
